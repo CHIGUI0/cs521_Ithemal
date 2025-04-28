@@ -4,7 +4,10 @@ import subprocess
 import torch
 import os
 import sys
+import multiprocessing
 from tqdm import tqdm
+from functools import partial
+import math
 
 def choose_architecture(arch="hsw"):
     """Choose one of the available architectures: hsw, ivb, or skl"""
@@ -20,6 +23,24 @@ def choose_architecture(arch="hsw"):
     
     print(f"Using architecture: {arch}")
     return csv_path
+
+def load_bad_block_ids():
+    """Load list of bad block IDs from the may-alias.csv file"""
+    bad_block_ids = set()
+    may_alias_path = "bhive/benchmark/may-alias.csv"
+    
+    if os.path.exists(may_alias_path):
+        try:
+            with open(may_alias_path, 'r') as f:
+                for line in f:
+                    bad_block_ids.add(line.strip())
+            print(f"Loaded {len(bad_block_ids)} bad block IDs to filter")
+        except Exception as e:
+            print(f"Error loading may-alias.csv: {e}")
+    else:
+        print(f"Warning: {may_alias_path} not found. No blocks will be filtered.")
+    
+    return bad_block_ids
 
 def disassemble_block(block_id):
     """Use the disasm tool to turn hex block into human-readable assembly"""
@@ -53,47 +74,93 @@ def tokenize_block(block_id):
         print("You might need to run: cd data_collection && mkdir build && cd build && cmake .. && make")
         return None
 
-def process_csv(csv_path, limit=None):
-    """Process each row in the CSV file and create data tuples"""
-    dataset = []
+def process_block(row, bad_block_ids):
+    """Process a single block and return a data tuple if successful"""
+    if len(row) < 2:  # Skip rows without enough columns
+        return None
     
+    block_id = row[0]
+    
+    # Check if this block is in the bad block list
+    if block_id in bad_block_ids:
+        return None
+    
+    throughput = float(row[1])
+    
+    # Disassemble the block
+    code_intel = disassemble_block(block_id)
+    if not code_intel:
+        return None
+        
+    # Tokenize the block
+    code_xml = tokenize_block(block_id)
+    if not code_xml:
+        return None
+    
+    # Create a tuple with the data
+    return (
+        block_id,                  # code_id 
+        throughput,                # timing (throughput)
+        code_intel,                # code_intel (assembly string)
+        code_xml                   # code_xml (tokenized XML string)
+    )
+
+def process_batch(batch, bad_block_ids):
+    """Process a batch of blocks in parallel"""
+    results = []
+    for row in batch:
+        result = process_block(row, bad_block_ids)
+        if result:
+            results.append(result)
+    return results
+
+def process_csv_parallel(csv_path, bad_block_ids, limit=None, num_processes=None):
+    """Process the CSV file using multiple processes"""
+    # Determine the number of processes to use
+    if num_processes is None:
+        num_processes = max(1, multiprocessing.cpu_count() - 1)  # Use all but one CPU core
+    
+    print(f"Using {num_processes} processes for parallel processing")
+    
+    # Read the CSV file
     try:
         with open(csv_path, 'r') as f:
             reader = csv.reader(f)
             rows = list(reader)
-            
+        
         if limit:
             rows = rows[:limit]
-            
-        for row in tqdm(rows, desc="Processing blocks"):
-            if len(row) >= 2:  # Make sure the row has at least 2 columns
-                block_id = row[0]
-                throughput = float(row[1])
-                
-                # Disassemble the block
-                code_intel = disassemble_block(block_id)
-                if not code_intel:
-                    continue
-                    
-                # Tokenize the block
-                code_xml = tokenize_block(block_id)
-                if not code_xml:
-                    continue
-                
-                # Create a tuple with the data
-                data_tuple = (
-                    block_id,                  # code_id 
-                    throughput,                # timing (throughput)
-                    code_intel,                # code_intel (assembly string)
-                    code_xml                   # code_xml (tokenized XML string)
-                )
-                
-                dataset.append(data_tuple)
-                
+        
+        total_rows = len(rows)
+        print(f"Processing {total_rows} blocks...")
+        
+        # Calculate batch size based on number of processes
+        batch_size = math.ceil(total_rows / (num_processes * 4))  # 4 batches per process
+        batches = [rows[i:i+batch_size] for i in range(0, total_rows, batch_size)]
+        
+        # Create a process pool
+        with multiprocessing.Pool(processes=num_processes) as pool:
+            # Process batches in parallel with progress bar
+            process_func = partial(process_batch, bad_block_ids=bad_block_ids)
+            results = list(tqdm(
+                pool.imap(process_func, batches),
+                total=len(batches),
+                desc="Processing batches"
+            ))
+        
+        # Flatten the results
+        dataset = [item for sublist in results for item in sublist]
+        
+        # Calculate statistics
+        skipped_count = total_rows - len(dataset)
+        if skipped_count > 0:
+            print(f"Skipped {skipped_count} blocks (filtered or failed processing)")
+        
+        return dataset
+    
     except Exception as e:
         print(f"Error processing CSV: {e}")
-    
-    return dataset
+        return []
 
 def save_dataset(dataset, arch):
     """Save the dataset using torch.save()"""
@@ -119,11 +186,22 @@ def main():
         except ValueError:
             print(f"Invalid limit: {sys.argv[2]}. Using all rows.")
     
+    # Get number of processes if specified
+    num_processes = None
+    if len(sys.argv) > 3:
+        try:
+            num_processes = int(sys.argv[3])
+        except ValueError:
+            print(f"Invalid number of processes: {sys.argv[3]}. Using default.")
+    
     csv_path = choose_architecture(arch)
     
-    # Process the CSV
+    # Load bad block IDs
+    bad_block_ids = load_bad_block_ids()
+    
+    # Process the CSV in parallel
     print(f"Processing {csv_path}...")
-    dataset = process_csv(csv_path, limit)
+    dataset = process_csv_parallel(csv_path, bad_block_ids, limit, num_processes)
     
     # Save the dataset
     if dataset:
@@ -133,4 +211,6 @@ def main():
         print("No data to save.")
 
 if __name__ == "__main__":
+    # Protect the entry point when using multiprocessing
+    multiprocessing.freeze_support()
     main() 
