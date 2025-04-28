@@ -1,3 +1,4 @@
 *.ipynb filter=nbstrip_full
 processed_data/*.data filter=lfs diff=lfs merge=lfs -text
 processed_data/bhive_ivb.data filter=lfs diff=lfs merge=lfs -text
+processed_data/bhive_skl.data filter=lfs diff=lfs merge=lfs -text
