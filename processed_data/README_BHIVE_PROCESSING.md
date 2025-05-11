@@ -123,3 +123,45 @@ python3 process_bhive_data.py hsw 1000 8  # Process 1000 blocks using 8 processe
    - Tokenizes it using the Ithemal tokenizer
    - Creates a tuple of (block_id, throughput, code_intel, code_xml)
 4. Saves the processed data as a PyTorch serialized file (.data) 
+
+## Working with Git LFS Data Files
+
+The processed data files (`.data` files) are stored using Git Large File Storage (Git LFS) due to their size. You'll need to set up Git LFS to access the actual file content rather than just the pointer files.
+
+### 1. Install Git LFS
+
+```bash
+# For Ubuntu/Debian
+curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
+sudo apt-get install git-lfs -y
+
+# For macOS using Homebrew
+brew install git-lfs
+
+# For other systems, see: https://git-lfs.com
+```
+
+### 2. Initialize Git LFS in your repository
+
+```bash
+# Initialize Git LFS
+git lfs install
+```
+
+### 3. Pull the actual data files
+
+```bash
+# Pull all LFS files
+git lfs pull
+
+# Or pull a specific file
+git lfs pull --include="processed_data/bhive_hsw.data"
+```
+
+### 4. Check if the data file was properly retrieved
+
+```bash
+# Use the 'file' command to check the file type
+file ./processed_data/bhive_hsw.data
+# Should show "data" instead of "ASCII text"
+```
