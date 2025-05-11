@@ -8,6 +8,7 @@ import multiprocessing
 from tqdm import tqdm
 from functools import partial
 import math
+import struct
 
 def choose_architecture(arch="hsw"):
     """Choose one of the available architectures: hsw, ivb, or skl"""
@@ -163,10 +164,34 @@ def process_csv_parallel(csv_path, bad_block_ids, limit=None, num_processes=None
         return []
 
 def save_dataset(dataset, arch):
-    """Save the dataset using torch.save()"""
-    output_file = f"bhive_{arch}.data"
+    """Save the dataset as simple binary data"""
+    output_file = f"processed_data/bhive_{arch}.data"
     try:
-        torch.save(dataset, output_file)
+        with open(output_file, 'wb') as f:
+            # Write number of items as a 4-byte integer
+            f.write(struct.pack('i', len(dataset)))
+            
+            # For each tuple in the dataset
+            for item in dataset:
+                block_id, throughput, code_intel, code_xml = item
+                
+                # Write block_id
+                f.write(struct.pack('i', len(block_id)))
+                f.write(block_id.encode('utf-8') if isinstance(block_id, str) else block_id)
+                
+                # Write throughput as float
+                f.write(struct.pack('f', float(throughput)))
+                
+                # Write code_intel
+                intel_bytes = code_intel.encode('utf-8')
+                f.write(struct.pack('i', len(intel_bytes)))
+                f.write(intel_bytes)
+                
+                # Write code_xml
+                xml_bytes = code_xml.encode('utf-8')
+                f.write(struct.pack('i', len(xml_bytes)))
+                f.write(xml_bytes)
+                
         print(f"Dataset saved to {output_file}")
     except Exception as e:
         print(f"Error saving dataset: {e}")
