@@ -35,8 +35,8 @@ Pre‑processed datasets for three micro‑architectures are available:
 | µArch      | File             | Size   |
 | ---------- | ---------------- | ------ |
 | Haswell    | `bhive_hsw.data` | 254 MB |
-| Ivy Bridge | `bhive_ivb.data` | 246 GB |
-| Skylake    | `bhive_skl.data` | 243 GB |
+| Ivy Bridge | `bhive_ivb.data` | 246 MB |
+| Skylake    | `bhive_skl.data` | 243 MB |
 
 Download the bundle from **Google Drive** and extract it anywhere:
 
