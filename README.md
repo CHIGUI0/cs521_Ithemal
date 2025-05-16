@@ -13,7 +13,7 @@
 
 ```bash
 # clone the repository (add --recursive if you plan to retrain)
-git clone https://github.com/YuxuanMa-sys/cs521_Ithemal.git
+git clone https://github.com/CHIGUI0/cs521_Ithemal.git
 cd cs521_Ithemal
 
 # create a dedicated env and install requirements
