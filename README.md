@@ -10,6 +10,7 @@
 ## Quick Start
 
 ### 1 · Install dependencies
+**The explicit conda environment file targets Linux x86‑64 binaries, so it will only recreate successfully on that platform.**
 
 ```bash
 # clone the repository (add --recursive if you plan to retrain)
